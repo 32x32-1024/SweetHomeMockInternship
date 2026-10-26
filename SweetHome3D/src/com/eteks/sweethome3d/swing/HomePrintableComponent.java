@@ -37,8 +37,10 @@ import java.awt.print.PrinterException;
 import java.awt.print.PrinterJob;
 import java.security.AccessControlException;
 import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 import java.util.Set;
@@ -51,6 +53,7 @@ import com.eteks.sweethome3d.model.HomePieceOfFurniture;
 import com.eteks.sweethome3d.model.HomePrint;
 import com.eteks.sweethome3d.model.LengthUnit;
 import com.eteks.sweethome3d.model.Level;
+import com.eteks.sweethome3d.model.Selectable;
 import com.eteks.sweethome3d.viewcontroller.ContentManager;
 import com.eteks.sweethome3d.viewcontroller.HomeController;
 import com.eteks.sweethome3d.viewcontroller.PlanView;
@@ -351,14 +354,12 @@ public class HomePrintableComponent extends JComponent implements Printable {
           && (homePrint == null
               || homePrint.isPlanPrinted()
               || homePrint.isView3DPrinted())) {
-        final Level selectedLevel = home.getSelectedLevel();
         furnitureTable = (FurnitureTable)furnitureView;
         furnitureFilter = furnitureTable.getFurnitureFilter();
         furnitureTable.setFurnitureFilter(new FurnitureTable.FurnitureFilter() {
             public boolean include(Home home, HomePieceOfFurniture piece) {
-              // Print only furniture at selected level when the plan or the 3D view is printed
+              // Print furniture at all viewable levels when the plan or the 3D view is printed
               return (furnitureFilter == null || furnitureFilter.include(home, piece))
-                  && piece.isAtLevel(selectedLevel)
                   && (piece.getLevel() == null || piece.getLevel().isViewable());
             }
           });
@@ -366,24 +367,47 @@ public class HomePrintableComponent extends JComponent implements Printable {
         furnitureFilter = null;
       }
       // Try to print next furniture view page      
-      pageExists = ((Printable)furnitureView).print(g2D, pageFormat, page);
-      if (furnitureTable != null) {
-        // Restore previous filter
-        ((FurnitureTable)furnitureView).setFurnitureFilter(furnitureFilter);
+      try {
+        pageExists = ((Printable)furnitureView).print(g2D, pageFormat, page);
+      } finally {
+        if (furnitureTable != null) {
+          // Restore previous filter
+          ((FurnitureTable)furnitureView).setFurnitureFilter(furnitureFilter);
+        }
       }
-      if (pageExists == PAGE_EXISTS
+        if (pageExists == PAGE_EXISTS
           && !this.printablePages.contains(page)) {
         this.printablePages.add(page);
         this.furniturePageCount++;
       }
     }
-    if (pageExists == NO_SUCH_PAGE 
-        && planView != null 
-        && (homePrint == null || homePrint.isPlanPrinted())) {
-      // Try to print next plan view page
-      pageExists = ((Printable)planView).print(g2D, pageFormat, page - this.furniturePageCount);
-      if (pageExists == PAGE_EXISTS
-          && !this.printablePages.contains(page)) {
+    if (pageExists == NO_SUCH_PAGE
+            && planView != null
+            && (homePrint == null || homePrint.isPlanPrinted())) {
+      List<Level> planLevels = new ArrayList<Level>();
+      for (Level level : this.home.getLevels()) {
+        if (level.isViewable()) {
+          planLevels.add(level);
+        }
+      }
+      int planPage = page - this.furniturePageCount;
+      if (this.home.getLevels().isEmpty()) {
+        // Home without levels: keep the previous behavior
+        pageExists = ((Printable)planView).print(g2D, pageFormat, planPage);
+      } else if (planPage >= 0 && planPage < planLevels.size()) {
+        Level oldLevel = this.home.getSelectedLevel();
+        List<Selectable> oldSelection = this.home.getSelectedItems();
+        boolean oldAllLevelsSelection = this.home.isAllLevelsSelection();
+        try {
+          this.home.setSelectedLevel(planLevels.get(planPage));
+          pageExists = ((Printable)planView).print(g2D, pageFormat, 0);
+        } finally {
+          this.home.setSelectedLevel(oldLevel);
+          this.home.setSelectedItems(oldSelection);
+          this.home.setAllLevelsSelection(oldAllLevelsSelection);
+        }
+      }
+      if (pageExists == PAGE_EXISTS && !this.printablePages.contains(page)) {
         this.printablePages.add(page);
         this.planPageCount++;
       }
