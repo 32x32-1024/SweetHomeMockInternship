@@ -384,30 +384,10 @@ public class HomePrintableComponent extends JComponent implements Printable {
     if (pageExists == NO_SUCH_PAGE
             && planView != null
             && (homePrint == null || homePrint.isPlanPrinted())) {
-      List<Level> planLevels = new ArrayList<Level>();
-      for (Level level : this.home.getLevels()) {
-        if (level.isViewable()) {
-          planLevels.add(level);
-        }
-      }
-      int planPage = page - this.furniturePageCount;
-      if (this.home.getLevels().isEmpty()) {
-        // Home without levels: keep the previous behavior
-        pageExists = ((Printable)planView).print(g2D, pageFormat, planPage);
-      } else if (planPage >= 0 && planPage < planLevels.size()) {
-        Level oldLevel = this.home.getSelectedLevel();
-        List<Selectable> oldSelection = this.home.getSelectedItems();
-        boolean oldAllLevelsSelection = this.home.isAllLevelsSelection();
-        try {
-          this.home.setSelectedLevel(planLevels.get(planPage));
-          pageExists = ((Printable)planView).print(g2D, pageFormat, 0);
-        } finally {
-          this.home.setSelectedLevel(oldLevel);
-          this.home.setSelectedItems(oldSelection);
-          this.home.setAllLevelsSelection(oldAllLevelsSelection);
-        }
-      }
-      if (pageExists == PAGE_EXISTS && !this.printablePages.contains(page)) {
+      // Try to print next plan view page
+      pageExists = ((Printable)planView).print(g2D, pageFormat, page - this.furniturePageCount);
+      if (pageExists == PAGE_EXISTS
+              && !this.printablePages.contains(page)) {
         this.printablePages.add(page);
         this.planPageCount++;
       }
